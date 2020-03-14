@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
+using System.Xml;
 using System.Xml.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -12,10 +14,12 @@ namespace cw2
     {
         static void Main(string[] args)
         {
-            //string path = "data.csv";
-            string path = "Data\\dane.csv";
-            string outPath = "result.xml";
+            string inFile = "data.csv";
+            string outFile = "result.xml";
             string dataType = "xml";
+            Log log = new Log();
+
+            // sprawdzenie i popbrane argumentów
             if (args.Length > 3)
             {
                 Console.WriteLine("Za duzo argumentow");
@@ -23,83 +27,133 @@ namespace cw2
             }
             else if (args.Length == 3)
             {
-                path = args[0];
-                outPath = args[1];
+                inFile = args[0];
+                outFile = args[1];
                 dataType = args[2];
             }
-            var list = new List<Student>();
 
-            //Wczytywanie
+            // obiekt główny
+            uczelnia Uczelnia = new uczelnia
+            {
+                createdAt = DateTime.Now.ToString("dd.MM.yyyy"),
+                author = "Adam Bajszczak",
+                studenci = new studenci { student = new List<student> { } },
+                activeStudies = new List<studies> { }
+            };
+
+            //wczytywanie danych
             try
             {
-                var fi = new FileInfo(path);
-                 using (var stream = new StreamReader(fi.OpenRead()))
-                 {
-                     string line = null;
-                     while ((line = stream.ReadLine()) != null)
-                     {
+                var fi = new FileInfo(inFile);
+                using (var stream = new StreamReader(fi.OpenRead()))
+                {
+                    string line = null;
+                    while ((line = stream.ReadLine()) != null)
+                    {
                         string[] kolumny = line.Split(',');
-                        if(kolumny.Length == 9)
+                        if (kolumny.Length == 9)
                         {
                             bool puste = false;
-                            for(int i = 0; i < 9; i++)
+                            for (int i = 0; i < 9; i++)
                             {
-                                if(kolumny[i].Equals("") || kolumny[i].Equals(" "))
+                                if (kolumny[i].Equals("") || kolumny[i].Equals(" "))
                                 {
-                                    //dodac studenta do log.txt
+                                    log.Dodaj(line);
                                     puste = true;
                                 }
                             }
                             if (!puste)
                             {
-                                //Student stud = new Student(kolumny[4],kolumny[0],kolumny[1],kolumny[5],kolumny[6],kolumny[7],kolumny[8],kolumny[2],kolumny[3]);
-                                Studia studia = new Studia
+                                studies studia = new studies
                                 {
-                                    Kierunek = kolumny[2],
-                                    Typ = kolumny[3]
+                                    name = kolumny[2],
+                                    mode = kolumny[3]
                                 };
-                                Student stud = new Student
+                                student stud = new student
                                 {
-                                    Indeks = kolumny[4],
-                                    Imie = kolumny[0],
-                                    Nazwisko = kolumny[1],
-                                    DataUrodzenia = kolumny[5],
-                                    Email = kolumny[6],
-                                    ImieMatki = kolumny[7],
-                                    ImieOjca = kolumny[8],
-                                    //KierunekStudiow = kolumny[2],
-                                    //TypStudiow = kolumny[3]
-                                    Studia = studia
+                                    indexNumber = kolumny[4],
+                                    fname = kolumny[0],
+                                    lname = kolumny[1],
+                                    birthdate = kolumny[5],
+                                    email = kolumny[6],
+                                    mothersName = kolumny[7],
+                                    fathersName = kolumny[8],
+                                    studies = studia
                                 };
-                                if (!list.Contains(stud))
-                                    list.Add(stud);
-                            }  
+                                if (!Uczelnia.studenci.student.Contains(stud))
+                                    Uczelnia.studenci.student.Add(stud);
+
+                                studies studia2 = new studies { };
+                                if (String.Equals(dataType, "json"))
+                                {
+                                    studia2.name = kolumny[2];
+                                    studia2.numberOfStudents = "1";
+                                }
+                                else
+                                {
+                                    studia2._name = kolumny[2];
+                                    studia2.numberOfStudents = "1";
+                                };
+                                if (!Uczelnia.activeStudies.Contains(studia2))
+                                    Uczelnia.activeStudies.Add(studia2);
+                                else
+                                    Uczelnia.activeStudies[Uczelnia.activeStudies.IndexOf(studia2)].numberOfStudents = (1 + int.Parse(Uczelnia.activeStudies[Uczelnia.activeStudies.IndexOf(studia2)].numberOfStudents)).ToString();
+                            }
                         }
                         else
                         {
-                            //zapisac blad do log.txt
+                            log.Dodaj(line);
                         }
-                     }
-                 }
+                    }
+                }
+                if (String.Equals(dataType, "json"))
+                {
 
-                var jsonString = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText("data.json", jsonString);
+                    // plik json
+                    var tmp = new { uczelnia = Uczelnia };
+                    string jsonString = JsonSerializer.Serialize(tmp, new JsonSerializerOptions { WriteIndented = true, IgnoreNullValues = true });
+                    File.WriteAllText(outFile, jsonString);
+                }
+                else
+                {
+                    // plik xml
+                    XmlWriter writer = XmlWriter.Create(outFile, new XmlWriterSettings { OmitXmlDeclaration = true, Indent = true, ConformanceLevel = ConformanceLevel.Auto });
+                    XmlSerializer serializer = new XmlSerializer(typeof(uczelnia));
+                    XmlSerializerNamespaces emptyns = new XmlSerializerNamespaces();
+                    emptyns.Add("", "");
+                    serializer.Serialize(writer, Uczelnia, emptyns);
+                }
 
-                FileStream writer = new FileStream(@"data.xml", FileMode.Create);
-                XmlSerializer serializer = new XmlSerializer(typeof(List<Student>), new XmlRootAttribute("uczelnia"));
-
-                serializer.Serialize(writer, list);
-            }catch(ArgumentException e)
-            {
-                //zapisac blad do log.txt
-                throw new ArgumentException("Podana sciezka jest niepoprawna");
-            }catch(FileNotFoundException e)
-            {
-                //zapisac blad do log.txt
-                throw new FileNotFoundException("Plik nazwa nie istnieje");
             }
-            
+            catch (ArgumentException)
+            {
+                log.Dodaj("Podana scieżka jest niepoprawna");
+                throw new ArgumentException("Podana scieżka jest niepoprawna");
+            }
+            catch (FileNotFoundException)
+            {
+                log.Dodaj("Plik z danymi nie został znaleziony");
+                throw new FileNotFoundException("Plik z danymi nie został znaleziony");
+            }
         }
+    }
 
+    // logowanie błędów
+    public class Log
+    {
+        public void Dodaj(string logMessage)
+        {
+            try
+            {
+                using (StreamWriter plik = File.AppendText("log.txt"))
+                {
+                    plik.WriteLine(logMessage);
+                }
+            }
+            catch (Exception)
+            {
+                throw new FileNotFoundException("Błąd zapisu do pliku log.txt");
+            }
+        }
     }
 }
